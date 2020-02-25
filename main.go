@@ -3,19 +3,23 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/disintegration/imaging"
+    "github.com/pixiv/go-libjpeg/jpeg"
+	//"github.com/disintegration/imaging"
+	"gopkg.in/h2non/bimg.v1"
 	"github.com/streadway/amqp"
 	"github.com/ugorji/go/codec"
 	"image"
-	_ "image/jpeg"
-	_ "image/png"
+	//_ "image/jpeg"
+	//_ "image/png"
 	"log"
 
 	"os"
+	"time"
 )
 
 
 func toBin (height  int, width int, img image.Image) []byte {
+	start := time.Now()
 	var pixels []byte
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
@@ -25,6 +29,8 @@ func toBin (height  int, width int, img image.Image) []byte {
 			pixels = append(pixels, byte(b/257))
 		}
 	}
+	elapsed := time.Since(start)
+	log.Printf("transform took %s", elapsed)
 	return pixels
 }
 
@@ -122,7 +128,7 @@ func main() {
 	messageChannel, err := channel.Consume(
 		queue.Name,
 		"ReplyToConsumer",
-		false,
+		true,
 		false,
 		false,
 		false,
@@ -137,6 +143,7 @@ func main() {
 	go func() {
 		log.Printf("Consumer ready, PID: %d", os.Getpid())
 		for d := range messageChannel {
+			SS := time.Now()
 			log.Println("Received a message")
 			decoded := make(map[string]interface{})
 			dec := codec.NewDecoderBytes(d.Body, new(codec.MsgpackHandle))
@@ -146,21 +153,59 @@ func main() {
 
 			imgBytes := decoded["image"].([]byte)
 
-			img, _, err := image.Decode(bytes.NewReader(imgBytes))
+			//elapsed := time.Since(start)
+			//log.Printf("image decoded took %s", elapsed)
+			start := time.Now()
+
+			imgOld, err := jpeg.DecodeIntoRGB(bytes.NewReader(imgBytes), &jpeg.DecoderOptions{})
 			if err != nil {
 				panic(err)
 			}
-			bounds := img.Bounds()
+			bounds := imgOld.Bounds()
 
+			//
 			width, height := bounds.Max.X, bounds.Max.Y
-
-			originalPixels := toBin(height, width, img)
-
+			fmt.Println(width)
+			fmt.Println(height)
+			////
+			////originalPixels := toBin(height, width, img)
+			////
 			var data []byte
+			//
+			elapsed := time.Since(start)
+			log.Printf("image ready took %s", elapsed)
+			start = time.Now()
+			//
+			//image480 := imaging.Fit(img, 480,360, imaging.Lanczos)
 
-			image480 := imaging.Fit(img, 480,360, imaging.Lanczos)
+			image480, err := bimg.NewImage(imgBytes).Resize(480, 360)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
 
-			resizePixels := toBin(360, 480, image480)
+			img, err := jpeg.DecodeIntoRGB(bytes.NewReader(image480), &jpeg.DecoderOptions{})
+			if err != nil {
+				panic(err)
+			}
+			bounds = img.Bounds()
+
+			//
+			width, height = bounds.Max.X, bounds.Max.Y
+			fmt.Println(width)
+			fmt.Println(height)
+			//bounds = image480.Bounds()
+			//
+			////
+			//width, height = bounds.Max.X, bounds.Max.Y
+			//
+			//fmt.Println(width)
+			//fmt.Println(height)
+			//
+			//resizePixels := toBin(360, 480, image480)
+			//
+			elapsed = time.Since(start)
+			log.Printf("image transform took %s", elapsed)
+			//start = time.Now()
 
 			// Save the resulting image as JPEG.
 			//err = imaging.Save(image480, "example.jpg")
@@ -170,8 +215,8 @@ func main() {
 
 			decoded["height"] = height
 			decoded["width"] = width
-			decoded["original"] = originalPixels
-			decoded["resize"] = resizePixels
+			decoded["original"] = &img
+			decoded["resize"] = &image480
 
 			enc := codec.NewEncoderBytes(&data, new(codec.MsgpackHandle))
 			if err := enc.Encode(&decoded); err != nil {
@@ -192,11 +237,13 @@ func main() {
 				panic("could not open RabbitMQ channel:" + err.Error())
 			}
 
-			if err := d.Ack(false); err != nil {
-				log.Printf("Error acknowledging message : %s", err)
-			} else {
-				log.Printf("Acknowledged message")
-			}
+			//if err := d.Ack(false); err != nil {
+			//	log.Printf("Error acknowledging message : %s", err)
+			//} else {
+			//	log.Printf("Acknowledged message")
+			//}
+			elapsed = time.Since(SS)
+			log.Printf("Binomial took %s", elapsed)
 
 		}
 	}()
