@@ -121,7 +121,7 @@ func main() {
 
 	messageChannel, err := channel.Consume(
 		queue.Name,
-		"",
+		"ReplyToConsumer",
 		false,
 		false,
 		false,
@@ -178,12 +178,13 @@ func main() {
 				panic(err)
 			}
 
-			queue, err := channel.QueueDeclare("enface.pps1", false, false, false, false, nil)
-			if err != nil {
-				panic("could not open RabbitMQ channel:" + err.Error())
-			}
+			//queue, err := channel.QueueDeclare(msg.ReplyTo, false, false, false, false, nil)
+			//if err != nil {
+			//	panic("could not open RabbitMQ channel:" + err.Error())
+			//}
 
-			err = channel.Publish("", queue.Name, false, false, amqp.Publishing{
+			err = channel.Publish("", d.ReplyTo, false, false, amqp.Publishing{
+				CorrelationId: d.CorrelationId,
 				Body: data,
 			})
 
