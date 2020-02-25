@@ -144,7 +144,7 @@ func main() {
 				panic(err)
 			}
 
-			imgBytes = decoded["image"].([]byte)
+			imgBytes := decoded["image"].([]byte)
 
 			img, _, err := image.Decode(bytes.NewReader(imgBytes))
 			if err != nil {
